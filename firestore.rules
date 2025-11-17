@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Categories collection
+    // - Anyone can read categories (public attendance page needs this)
+    // - Only authenticated users can create, update, or delete categories
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // Attendance collection
+    // - Anyone can read attendance data (public attendance page needs this)
+    // - Only authenticated users can create, update, or delete attendance records
+    match /attendance/{monthKey} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+  }
+}
