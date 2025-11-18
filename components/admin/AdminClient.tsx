@@ -9,6 +9,7 @@ import { getCurrentMonthKey, formatMonthKey } from '@/lib/utils/date';
 import {
   updateAttendanceStatus,
   resetMonthlyAttendance,
+  bulkUpdateAttendanceStatus,
 } from '@/lib/actions/attendance';
 import {
   addCategory,
@@ -21,9 +22,15 @@ import CategoryStatCard from '@/components/attendance/CategoryStatCard';
 import StatusBadge from '@/components/attendance/StatusBadge';
 import AttendanceCheckmark from '@/components/attendance/AttendanceCheckmark';
 import AttendanceModal from '@/components/attendance/AttendanceModal';
+import BulkActionBar from './BulkActionBar';
+import BulkAttendanceModal from './BulkAttendanceModal';
 import AdminManagementPanel from './AdminManagementPanel';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import type { Category, AttendanceData, User } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { LogOut, Settings, Maximize2, Search, RotateCcw, ListChecks, Menu, X } from 'lucide-react';
 
 interface AdminClientProps {
   initialCategories: Category[];
@@ -46,6 +53,10 @@ const AdminClient: React.FC<AdminClientProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [pendingBulkStatus, setPendingBulkStatus] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const currentMonthKey = getCurrentMonthKey();
 
   // Real-time listener for attendance data
@@ -130,6 +141,72 @@ const AdminClient: React.FC<AdminClientProps> = ({
     await destroySession();
   };
 
+  // Bulk selection handlers
+  const toggleBulkMode = () => {
+    setBulkMode(!bulkMode);
+    setSelectedUserIds(new Set());
+  };
+
+  const toggleUserSelection = (userId: string) => {
+    const newSelection = new Set(selectedUserIds);
+    if (newSelection.has(userId)) {
+      newSelection.delete(userId);
+    } else {
+      newSelection.add(userId);
+    }
+    setSelectedUserIds(newSelection);
+  };
+
+  const selectAllInCategory = (categoryId: string) => {
+    const category = displayData.find((cat) => cat.id === categoryId);
+    if (!category) return;
+
+    const newSelection = new Set(selectedUserIds);
+    const categoryUserIds = category.users.map((user) => user.id);
+    const allSelected = categoryUserIds.every((id) => newSelection.has(id));
+
+    if (allSelected) {
+      // Deselect all in category
+      categoryUserIds.forEach((id) => newSelection.delete(id));
+    } else {
+      // Select all in category
+      categoryUserIds.forEach((id) => newSelection.add(id));
+    }
+
+    setSelectedUserIds(newSelection);
+  };
+
+  const clearSelection = () => {
+    setSelectedUserIds(new Set());
+  };
+
+  const handleBulkStatusChange = (status: string) => {
+    setPendingBulkStatus(status);
+  };
+
+  const confirmBulkStatusChange = async () => {
+    if (!pendingBulkStatus || selectedUserIds.size === 0) return;
+
+    const userIdsArray = Array.from(selectedUserIds);
+    const result = await bulkUpdateAttendanceStatus(
+      userIdsArray,
+      pendingBulkStatus,
+      currentMonthKey
+    );
+
+    if (result.success) {
+      alert(`Berhasil mengubah status ${result.count} pengguna.`);
+      setSelectedUserIds(new Set());
+      setPendingBulkStatus(null);
+    } else {
+      alert('Gagal mengubah status pengguna.');
+    }
+  };
+
+  const cancelBulkStatusChange = () => {
+    setPendingBulkStatus(null);
+  };
+
   const displayData = useMemo(() => {
     if (!attendanceData) return [];
 
@@ -151,6 +228,19 @@ const AdminClient: React.FC<AdminClientProps> = ({
     }
     return filteredAndSorted;
   }, [masterConfig, attendanceData, searchTerm, viewMode]);
+
+  // Get selected users for modal
+  const selectedUsers = useMemo(() => {
+    const users: User[] = [];
+    displayData.forEach((category) => {
+      category.users.forEach((user) => {
+        if (selectedUserIds.has(user.id)) {
+          users.push(user);
+        }
+      });
+    });
+    return users;
+  }, [displayData, selectedUserIds]);
 
   const attendanceStats = useMemo(() => {
     const originalData = masterConfig.map((cat) => ({
@@ -187,59 +277,103 @@ const AdminClient: React.FC<AdminClientProps> = ({
           onClose={() => setEditingUser(null)}
         />
       )}
-      <main>
-        <header className="header">
-          <div className="header-left">
-            <h1>Panel Admin</h1>
-            {viewMode === 'attendance' && (
-              <span className="header-subtitle">
-                {formatMonthKey(currentMonthKey)}
-              </span>
-            )}
-          </div>
-          <div className="header-controls">
-            {viewMode === 'attendance' && (
-              <button
-                className="admin-btn btn-reset"
-                onClick={handleResetAttendance}
-              >
-                Reset Kehadiran
-              </button>
-            )}
-            <button
-              className="view-toggle-btn"
-              onClick={handleLogout}
-              aria-label="Logout"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
-              </svg>
-            </button>
-            <button
-              className="view-toggle-btn"
-              onClick={() =>
-                setViewMode(viewMode === 'attendance' ? 'admin' : 'attendance')
-              }
-              aria-label={
-                viewMode === 'attendance' ? 'Buka mode admin' : 'Tutup mode admin'
-              }
-            >
-              {viewMode === 'attendance' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                  <path d="M19.44 12.99l-2.52.5c-.14-1.06-.5-2.06-.98-2.99l1.49-2.23c-.31-.47-.21-1.09-.26-1.4l-1.41-1.41c-.46-.46-1.13-.57-1.6-.26l-2.22 1.5c-.93-.48-1.94-.84-3-.98l.5-2.52C9.51 2.62 9.07 2 8.5 2h-2c-.57 0-1.01.62-.94 1.19l.5 2.52c-1.06.14-2.06.5-2.99.98L.84 5.2c-.47-.31-1.09-.21-1.4.26L1.15 3.15c-.46.46-.57 1.13-.26 1.6l1.5 2.22c-.48.93-.84 1.94-.98 3l-2.52-.5C-1.19 9.51-1.63 10-2.2 10v2c0 .57.62 1.01 1.19.94l2.52-.5c.14 1.06.5 2.06.98 2.99l-1.49 2.23c-.31.47-.21 1.09.26 1.4l1.41 1.41c.46.46 1.13.57 1.6.26l2.22-1.5c.93.48 1.94.84 3 .98l-.5 2.52c-.07.57.37 1.19.94 1.19h2c.57 0 1.01-.62.94-1.19l-.5-2.52c1.06-.14 2.06-.5 2.99-.98l2.23 1.49c.47.31 1.09.21 1.4-.26l1.41-1.41c.46.46.57 1.13.26-1.6l-1.5-2.22c.48-.93.84-1.94.98-3l2.52.5c.57-.07 1.19-.51 1.19-1.08v-2c-.01-.57-.63-1.01-1.2-0.93zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 2h-2v3h-3v2h5v-5zm-3-2V5h-2v3h-3v2h5z" />
-                </svg>
-              )}
-            </button>
+      {pendingBulkStatus && selectedUsers.length > 0 && (
+        <BulkAttendanceModal
+          selectedUsers={selectedUsers}
+          newStatus={pendingBulkStatus}
+          onConfirm={confirmBulkStatusChange}
+          onCancel={cancelBulkStatusChange}
+        />
+      )}
+      {bulkMode && viewMode === 'attendance' && (
+        <BulkActionBar
+          selectedCount={selectedUserIds.size}
+          onClearSelection={clearSelection}
+          onApplyStatus={handleBulkStatusChange}
+        />
+      )}
+      <main className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+          <div className="w-full px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center gap-2 sm:gap-3">
+                {viewMode === 'admin' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    aria-label="Toggle menu"
+                    className="lg:hidden"
+                  >
+                    {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                  </Button>
+                )}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Panel Admin</h1>
+                  {viewMode === 'attendance' && (
+                    <span className="text-xs sm:text-sm text-gray-500 font-medium px-2 sm:px-3 py-0.5 sm:py-1 bg-gray-100 rounded-full">
+                      {formatMonthKey(currentMonthKey)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 sm:gap-2">
+                {viewMode === 'attendance' && (
+                  <>
+                    <Button
+                      variant={bulkMode ? 'default' : 'outline'}
+                      onClick={toggleBulkMode}
+                      className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4"
+                      size="sm"
+                    >
+                      <ListChecks className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <span className="hidden sm:inline">{bulkMode ? 'Exit Bulk' : 'Bulk Select'}</span>
+                      <span className="sm:hidden">{bulkMode ? 'Exit' : 'Bulk'}</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleResetAttendance}
+                      className="gap-1 sm:gap-2 hidden sm:flex"
+                      size="sm"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Reset Kehadiran
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  aria-label="Logout"
+                  className="hidden sm:flex"
+                >
+                  <LogOut className="w-5 h-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    setViewMode(viewMode === 'attendance' ? 'admin' : 'attendance')
+                  }
+                  aria-label={
+                    viewMode === 'attendance' ? 'Buka mode admin' : 'Tutup mode admin'
+                  }
+                >
+                  {viewMode === 'attendance' ? (
+                    <Settings className="w-5 h-5" />
+                  ) : (
+                    <Maximize2 className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </header>
 
         {viewMode === 'attendance' ? (
-          <>
-            <section className="stats-container" aria-label="Statistik Kehadiran">
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6" aria-label="Statistik Kehadiran">
               {attendanceStats.map((stat) => (
                 <CategoryStatCard
                   key={stat.categoryId}
@@ -252,93 +386,157 @@ const AdminClient: React.FC<AdminClientProps> = ({
               ))}
             </section>
 
-            <div className="search-container">
-              <input
-                type="search"
-                className="search-input"
-                placeholder="Cari nama untuk absen..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Input
+                  type="search"
+                  placeholder="Cari nama untuk absen..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 h-12 text-base"
+                />
+              </div>
             </div>
 
             {displayData.length === 0 && searchTerm && (
-              <p className="no-results">Nama tidak ditemukan.</p>
+              <p className="text-center text-gray-500 py-8 text-lg">Nama tidak ditemukan.</p>
             )}
 
-            {displayData.map((category) => (
-              <section key={category.id} className="attendance-section">
-                <h2
-                  className="section-title"
-                  style={{ backgroundColor: category.color }}
-                >
-                  {category.name}
-                </h2>
-                <ul className="user-list">
-                  {category.users.map((person) => (
-                    <li
-                      key={person.id}
-                      className="user-item interactive"
-                      onClick={() => setEditingUser(person)}
-                      tabIndex={0}
-                    >
-                      <div className="user-info">
-                        {person.status !== ATTENDANCE_STATUS.ABSENT && (
-                          <AttendanceCheckmark />
-                        )}
-                        <span className="user-item-label">{person.name}</span>
+            {displayData.map((category) => {
+              const categoryUserIds = category.users.map((u) => u.id);
+              const allSelected = categoryUserIds.length > 0 && categoryUserIds.every((id) => selectedUserIds.has(id));
+              const someSelected = categoryUserIds.some((id) => selectedUserIds.has(id)) && !allSelected;
+
+              return (
+                <section key={category.id} className="mb-6">
+                  <div
+                    className="rounded-t-lg px-6 py-3 font-bold text-white text-lg flex items-center justify-between"
+                    style={{ backgroundColor: category.color }}
+                  >
+                    <span>{category.name}</span>
+                    {bulkMode && category.users.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={() => selectAllInCategory(category.id)}
+                          className="border-2 border-white data-[state=checked]:bg-white data-[state=checked]:text-gray-900"
+                        />
+                        <span className="text-sm font-normal">Select All</span>
                       </div>
-                      <StatusBadge status={person.status || ATTENDANCE_STATUS.ABSENT} />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </>
+                    )}
+                  </div>
+                  <div className="bg-white rounded-b-lg border border-gray-200 divide-y divide-gray-100">
+                    {category.users.map((person) => (
+                      <div
+                        key={person.id}
+                        className={`flex items-center justify-between px-6 py-4 transition-colors ${
+                          selectedUserIds.has(person.id) ? 'bg-blue-50' : ''
+                        } ${bulkMode ? '' : 'cursor-pointer hover:bg-gray-50'}`}
+                        onClick={() => {
+                          if (bulkMode) {
+                            toggleUserSelection(person.id);
+                          } else {
+                            setEditingUser(person);
+                          }
+                        }}
+                        tabIndex={0}
+                      >
+                        <div className="flex items-center gap-3">
+                          {bulkMode && (
+                            <Checkbox
+                              checked={selectedUserIds.has(person.id)}
+                              onCheckedChange={() => toggleUserSelection(person.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                          {!bulkMode && person.status !== ATTENDANCE_STATUS.ABSENT && (
+                            <AttendanceCheckmark />
+                          )}
+                          <span className="font-medium text-gray-900">{person.name}</span>
+                        </div>
+                        <StatusBadge status={person.status || ATTENDANCE_STATUS.ABSENT} />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         ) : (
-          <div className="admin-panel">
-            <nav className="admin-sidebar">
-              <button
-                className={`admin-sidebar-btn ${
-                  adminView.view === 'report' ? 'active' : ''
-                }`}
-                onClick={() => {
-                  setAdminView({ view: 'report' });
-                  setCurrentPage(1);
-                }}
-              >
-                Laporan Kehadiran
-              </button>
-              <button
-                className={`admin-sidebar-btn ${
-                  adminView.view === 'add_category' ? 'active' : ''
-                }`}
-                onClick={() => {
-                  setAdminView({ view: 'add_category' });
-                  setCurrentPage(1);
-                }}
-              >
-                Tambah Kategori
-              </button>
-              {masterConfig.map((cat) => (
-                <button
-                  key={cat.id}
-                  className={`admin-sidebar-btn ${
-                    adminView.view === 'manage_category' &&
-                    adminView.categoryId === cat.id
-                      ? 'active'
-                      : ''
-                  }`}
+          <div className="flex h-[calc(100vh-4rem)] relative">
+            {/* Mobile overlay */}
+            {mobileMenuOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+            )}
+
+            {/* Sidebar Navigation */}
+            <nav className={`
+              fixed lg:relative
+              w-64 bg-white border-r border-gray-200
+              overflow-y-auto flex-shrink-0
+              h-[calc(100vh-4rem)] lg:h-auto
+              z-40 lg:z-auto
+              transition-transform duration-300 ease-in-out
+              ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+            `}>
+              <div className="p-4 space-y-1">
+                <Button
+                  variant={adminView.view === 'report' ? 'secondary' : 'ghost'}
+                  className="w-full justify-start text-left px-3"
                   onClick={() => {
-                    setAdminView({ view: 'manage_category', categoryId: cat.id });
+                    setAdminView({ view: 'report' });
                     setCurrentPage(1);
+                    setMobileMenuOpen(false);
                   }}
                 >
-                  {cat.name}
-                </button>
-              ))}
+                  Laporan Kehadiran
+                </Button>
+                <Button
+                  variant={adminView.view === 'add_category' ? 'secondary' : 'ghost'}
+                  className="w-full justify-start text-left px-3"
+                  onClick={() => {
+                    setAdminView({ view: 'add_category' });
+                    setCurrentPage(1);
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  Tambah Kategori
+                </Button>
+                <div className="pt-4 pb-2">
+                  <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">
+                    Kategori
+                  </h3>
+                </div>
+                {masterConfig.map((cat) => (
+                  <Button
+                    key={cat.id}
+                    variant={
+                      adminView.view === 'manage_category' &&
+                      adminView.categoryId === cat.id
+                        ? 'secondary'
+                        : 'ghost'
+                    }
+                    className="w-full justify-start text-left px-3"
+                    onClick={() => {
+                      setAdminView({ view: 'manage_category', categoryId: cat.id });
+                      setCurrentPage(1);
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <span className="truncate">{cat.name}</span>
+                  </Button>
+                ))}
+              </div>
             </nav>
-            <main className="admin-content">
+            <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50 min-w-0 w-full">
               <AdminManagementPanel
                 masterConfig={masterConfig}
                 adminView={adminView}

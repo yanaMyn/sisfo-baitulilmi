@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase/client';
 import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { createSession } from '@/lib/actions/auth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Lock, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -54,46 +57,73 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-box">
-        <div className="login-icon">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" />
-          </svg>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-700 to-blue-500 p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-2xl p-8">
+          {/* Icon */}
+          <div className="flex justify-center mb-6">
+            <div className="bg-white/20 p-4 rounded-full">
+              <Lock className="w-12 h-12 text-white" />
+            </div>
+          </div>
+
+          {/* Title */}
+          <h1 className="text-3xl font-bold text-white text-center mb-2">
+            Admin Login
+          </h1>
+          <p className="text-blue-100 text-center mb-8">
+            Silakan masuk untuk melanjutkan.
+          </p>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                type="email"
+                placeholder="Email (e.g., admin@example.com)"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoFocus
+                disabled={loading}
+                className="bg-white/90 border-white/30 text-gray-900 placeholder:text-gray-500 focus:bg-white"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Input
+                type="password"
+                placeholder="Kata Sandi"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                className="bg-white/90 border-white/30 text-gray-900 placeholder:text-gray-500 focus:bg-white"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-white text-blue-700 hover:bg-blue-50 font-semibold h-12 text-lg"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                'Masuk'
+              )}
+            </Button>
+          </form>
         </div>
-        <h1>Admin Login</h1>
-        <p>Silakan masuk untuk melanjutkan.</p>
-        <form onSubmit={handleSubmit} className="login-form">
-          <input
-            type="email"
-            className="admin-input"
-            placeholder="Email (e.g., admin@example.com)"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoFocus
-            disabled={loading}
-          />
-          <input
-            type="password"
-            className="admin-input"
-            placeholder="Kata Sandi"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-          />
-          {error && <p className="login-error">{error}</p>}
-          <button
-            type="submit"
-            className="admin-btn btn-add login-btn"
-            disabled={loading}
-          >
-            {loading ? 'Memproses...' : 'Masuk'}
-          </button>
-        </form>
       </div>
     </div>
   );

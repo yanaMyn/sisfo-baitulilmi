@@ -6,7 +6,8 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { ATTENDANCE_STATUS } from '@/lib/constants'
 import { getCurrentMonthKey, formatMonthKey } from '@/lib/utils/date'
 import { updateAttendanceStatus } from '@/lib/actions/attendance'
-import CategoryStatCard from './CategoryStatCard'
+import CompactStatCard from './CompactStatCard'
+import StatDetailModal from './StatDetailModal'
 import StatusBadge from './StatusBadge'
 import AttendanceCheckmark from './AttendanceCheckmark'
 import PublicAttendanceModal from './PublicAttendanceModal'
@@ -28,6 +29,7 @@ const PublicAttendanceClient: React.FC<PublicAttendanceClientProps> = ({
     useState<AttendanceData>(initialAttendance)
   const [searchTerm, setSearchTerm] = useState('')
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [selectedStat, setSelectedStat] = useState<AttendanceStats | null>(null)
   const currentMonthKey = getCurrentMonthKey()
   const statsSectionRef = useRef<HTMLElement>(null)
 
@@ -107,33 +109,50 @@ const PublicAttendanceClient: React.FC<PublicAttendanceClientProps> = ({
           onClose={() => setEditingUser(null)}
         />
       )}
-      <main>
-        <header className='header'>
+      {selectedStat && (
+        <StatDetailModal
+          title={selectedStat.name}
+          attended={selectedStat.attended}
+          total={selectedStat.total}
+          percentage={selectedStat.percentage}
+          color={selectedStat.color}
+          onClose={() => setSelectedStat(null)}
+        />
+      )}
+      <main className='split-view-container'>
+        {/* Header */}
+        <header className='header-compact'>
           <div className='header-left'>
-            <h1>Absensi ASAD Baitul Ilmi</h1>
-            <span className='header-subtitle'>
+            <h1 className='text-xl font-bold text-blue-700'>Absensi ASAD Baitul Ilmi</h1>
+            <span className='text-sm font-semibold text-gray-600'>
               {formatMonthKey(currentMonthKey)}
             </span>
           </div>
         </header>
+
+        {/* Sticky Stats Section - Top Half */}
         <section
           ref={statsSectionRef}
-          className='stats-container'
+          className='stats-container-compact'
           aria-label='Statistik Kehadiran'
         >
-          {attendanceStats.map((stat) => (
-            <CategoryStatCard
-              key={stat.categoryId}
-              title={stat.name}
-              attended={stat.attended}
-              total={stat.total}
-              percentage={stat.percentage}
-              color={stat.color}
-            />
-          ))}
+          <div className='stats-scroll-wrapper'>
+            {attendanceStats.map((stat) => (
+              <CompactStatCard
+                key={stat.categoryId}
+                title={stat.name}
+                attended={stat.attended}
+                total={stat.total}
+                percentage={stat.percentage}
+                color={stat.color}
+                onClick={() => setSelectedStat(stat)}
+              />
+            ))}
+          </div>
         </section>
 
-        <div className='search-container'>
+        {/* Search Bar */}
+        <div className='search-container-compact'>
           <input
             type='search'
             className='search-input'
@@ -143,39 +162,42 @@ const PublicAttendanceClient: React.FC<PublicAttendanceClientProps> = ({
           />
         </div>
 
-        {displayData.length === 0 && searchTerm && (
-          <p className='no-results'>Nama tidak ditemukan.</p>
-        )}
+        {/* Scrollable Name List - Bottom Half */}
+        <div className='name-list-container'>
+          {displayData.length === 0 && searchTerm && (
+            <p className='no-results'>Nama tidak ditemukan.</p>
+          )}
 
-        {displayData.map((category) => (
-          <section key={category.id} className='attendance-section'>
-            <h2
-              className='section-title'
-              style={{ backgroundColor: category.color }}
-            >
-              {category.name}
-            </h2>
-            <ul className='user-list'>
-              {category.users.map((person) => (
-                <li
-                  key={person.id}
-                  className='user-item interactive'
-                  onClick={() => setEditingUser(person)}
-                >
-                  <div className='user-info'>
-                    {person.status !== ATTENDANCE_STATUS.ABSENT && (
-                      <AttendanceCheckmark />
-                    )}
-                    <span className='user-item-label'>{person.name}</span>
-                  </div>
-                  <StatusBadge
-                    status={person.status || ATTENDANCE_STATUS.ABSENT}
-                  />
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+          {displayData.map((category) => (
+            <section key={category.id} className='attendance-section'>
+              <h2
+                className='section-title'
+                style={{ backgroundColor: category.color }}
+              >
+                {category.name}
+              </h2>
+              <ul className='user-list'>
+                {category.users.map((person) => (
+                  <li
+                    key={person.id}
+                    className='user-item interactive'
+                    onClick={() => setEditingUser(person)}
+                  >
+                    <div className='user-info'>
+                      {person.status !== ATTENDANCE_STATUS.ABSENT && (
+                        <AttendanceCheckmark />
+                      )}
+                      <span className='user-item-label'>{person.name}</span>
+                    </div>
+                    <StatusBadge
+                      status={person.status || ATTENDANCE_STATUS.ABSENT}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       </main>
     </>
   )

@@ -67,6 +67,38 @@ export async function resetMonthlyAttendance(month: string) {
 }
 
 /**
+ * Bulk update attendance status for multiple users
+ */
+export async function bulkUpdateAttendanceStatus(
+  userIds: string[],
+  status: string,
+  month: string
+) {
+  try {
+    if (userIds.length === 0) {
+      return { success: false, error: 'No users selected' };
+    }
+
+    const attendanceRef = adminDb.collection('attendance').doc(month);
+    const bulkData: Record<string, any> = {};
+
+    userIds.forEach((userId) => {
+      bulkData[`${userId}.status`] = status;
+    });
+
+    await attendanceRef.update(bulkData);
+
+    revalidatePath('/');
+    revalidatePath('/admin');
+
+    return { success: true, count: userIds.length };
+  } catch (error) {
+    console.error('Error bulk updating attendance:', error);
+    return { success: false, error: 'Failed to bulk update attendance' };
+  }
+}
+
+/**
  * Initialize attendance document for a month if it doesn't exist
  */
 export async function initializeAttendance(month: string) {
